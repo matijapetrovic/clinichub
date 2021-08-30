@@ -13,7 +13,9 @@ type Service interface {
 	GetById(ctx context.Context, id string) (entity.Clinic, error)
 	GetAll(ctx context.Context) ([]entity.Clinic, error)
 	Create(ctx context.Context, req CreateClinicRequest) (entity.Clinic, error)
+	Update(ctx context.Context, clinicId string, req UpdateClinicRequest) (entity.Clinic, error)
 	AddAppointmentTypePrice(ctx context.Context, req AddAppointmentTypePriceRequest) error
+	GetAppointmentTypePrices(ctx context.Context, clinicId string) ([]entity.AppointmentTypePrice, error)
 }
 
 type CreateClinicRequest struct {
@@ -23,6 +25,19 @@ type CreateClinicRequest struct {
 }
 
 func (m CreateClinicRequest) Validate() error {
+	return validation.ValidateStruct(&m,
+		validation.Field(&m.Name, validation.Required, validation.Length(1, 50)),
+		validation.Field(&m.Description, validation.Required, validation.Length(1, 256)),
+	)
+}
+
+type UpdateClinicRequest struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Address     entity.Address `json:"address"`
+}
+
+func (m UpdateClinicRequest) Validate() error {
 	return validation.ValidateStruct(&m,
 		validation.Field(&m.Name, validation.Required, validation.Length(1, 50)),
 		validation.Field(&m.Description, validation.Required, validation.Length(1, 256)),
@@ -68,15 +83,36 @@ func (s service) Create(ctx context.Context, req CreateClinicRequest) (entity.Cl
 	}
 
 	id := entity.GenerateID()
-	clinic, err := s.repo.Save(ctx, entity.Clinic{
+	err := s.repo.Create(ctx, entity.Clinic{
 		Id:                id,
 		Name:              req.Name,
 		Description:       req.Description,
 		Address:           req.Address,
-		Doctors:           make([]entity.Doctor, 0),
 		AppointmentPrices: make(map[string]uint),
 	})
 
+	if err != nil {
+		return entity.Clinic{}, err
+	}
+
+	return s.repo.GetById(ctx, id)
+}
+
+func (s service) Update(ctx context.Context, clinicId string, req UpdateClinicRequest) (entity.Clinic, error) {
+	if err := req.Validate(); err != nil {
+		return entity.Clinic{}, err
+	}
+
+	clinic, err := s.repo.GetById(ctx, clinicId)
+	if err != nil {
+		return entity.Clinic{}, err
+	}
+
+	clinic.Name = req.Name
+	clinic.Description = req.Description
+	clinic.Address = req.Address
+
+	err = s.repo.Update(ctx, clinic)
 	if err != nil {
 		return entity.Clinic{}, err
 	}
@@ -108,4 +144,22 @@ func (s service) AddAppointmentTypePrice(ctx context.Context, req AddAppointment
 	clinic.AppointmentPrices[appointmentType.Id] = req.Price
 
 	return nil
+}
+
+func (s service) GetAppointmentTypePrices(ctx context.Context, clinicId string) ([]entity.AppointmentTypePrice, error) {
+	appointmentTypePrices, err := s.repo.GetAppointmentTypePrices(ctx, clinicId)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, price := range appointmentTypePrices {
+		appointmentType, err := s.appointmentTypeRepo.GetById(ctx, price.AppointmentTypeId)
+		if err != nil {
+			return nil, err
+		}
+		price.AppointmentType = appointmentType
+		appointmentTypePrices[i] = price
+	}
+
+	return appointmentTypePrices, nil
 }

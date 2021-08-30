@@ -3,15 +3,18 @@ package clinic
 import (
 	"context"
 
+	dbx "github.com/go-ozzo/ozzo-dbx"
 	"github.com/matijapetrovic/clinichub/clinic-service/internal/entity"
 	"github.com/matijapetrovic/clinichub/clinic-service/pkg/dbcontext"
 	"github.com/matijapetrovic/clinichub/clinic-service/pkg/log"
 )
 
 type Repository interface {
-	Save(ctx context.Context, clinic entity.Clinic) (entity.Clinic, error)
+	Create(ctx context.Context, clinic entity.Clinic) error
+	Update(ctx context.Context, clinic entity.Clinic) error
 	GetAll(ctx context.Context) ([]entity.Clinic, error)
 	GetById(ctx context.Context, id string) (entity.Clinic, error)
+	GetAppointmentTypePrices(ctx context.Context, clinicId string) ([]entity.AppointmentTypePrice, error)
 }
 
 type repository struct {
@@ -24,13 +27,30 @@ func NewRepository(db *dbcontext.DB, logger log.Logger) Repository {
 }
 
 func (r repository) GetById(ctx context.Context, id string) (entity.Clinic, error) {
-	return entity.Clinic{}, nil
+	var clinic entity.Clinic
+	err := r.db.With(ctx).Select().Model(id, &clinic)
+	return clinic, err
 }
 
 func (r repository) GetAll(ctx context.Context) ([]entity.Clinic, error) {
-	return make([]entity.Clinic, 0), nil
+	var clinics []entity.Clinic
+	err := r.db.With(ctx).Select().All(&clinics)
+	return clinics, err
 }
 
-func (r repository) Save(ctx context.Context, clinic entity.Clinic) (entity.Clinic, error) {
-	return clinic, nil
+func (r repository) Create(ctx context.Context, clinic entity.Clinic) error {
+	return r.db.With(ctx).Model(&clinic).Exclude("AppointmentPrices").Insert()
+}
+
+func (r repository) Update(ctx context.Context, clinic entity.Clinic) error {
+	return r.db.With(ctx).Model(&clinic).Exclude("AppointmentPrices").Update()
+}
+
+func (r repository) GetAppointmentTypePrices(ctx context.Context, clinicId string) ([]entity.AppointmentTypePrice, error) {
+	var appointmentTypePrices []entity.AppointmentTypePrice
+	err := r.db.With(ctx).
+		Select().
+		Where(dbx.HashExp{"clinic_id": clinicId}).
+		All(&appointmentTypePrices)
+	return appointmentTypePrices, err
 }

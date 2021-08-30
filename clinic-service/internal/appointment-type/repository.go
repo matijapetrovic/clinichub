@@ -10,6 +10,7 @@ import (
 
 type Repository interface {
 	GetById(ctx context.Context, id string) (entity.AppointmentType, error)
+	Create(ctx context.Context, appointmentType entity.AppointmentType) error
 }
 
 type repository struct {
@@ -22,5 +23,11 @@ func NewRepository(db *dbcontext.DB, logger log.Logger) Repository {
 }
 
 func (r repository) GetById(ctx context.Context, id string) (entity.AppointmentType, error) {
-	return entity.AppointmentType{}, nil
+	var appointmentType entity.AppointmentType
+	err := r.db.With(ctx).Select().Model(id, &appointmentType)
+	return appointmentType, err
+}
+
+func (r repository) Create(ctx context.Context, appointmentType entity.AppointmentType) error {
+	return r.db.With(ctx).Model(&appointmentType).Insert()
 }

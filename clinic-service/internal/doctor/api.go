@@ -14,13 +14,24 @@ func RegisterHandlers(r *routing.RouteGroup, service Service, authHandler routin
 	// r.Use(authHandler)
 
 	r.Get("/doctors", res.getAll)
+	r.Get("/clinics/<clinicId>/doctors", res.getByClinicId)
 
 	r.Post("/doctors", res.create)
+	r.Put("/doctors/<id>", res.update)
 }
 
 type resource struct {
 	service Service
 	logger  log.Logger
+}
+
+func (r resource) getByClinicId(c *routing.Context) error {
+	doctors, err := r.service.GetByClinicId(c.Request.Context(), c.Param("clinicId"))
+	if err != nil {
+		return err
+	}
+
+	return c.Write(doctors)
 }
 
 func (r resource) getAll(c *routing.Context) error {
@@ -44,4 +55,19 @@ func (r resource) create(c *routing.Context) error {
 	}
 
 	return c.WriteWithStatus(doctor, http.StatusCreated)
+}
+
+func (r resource) update(c *routing.Context) error {
+	var input UpdateDoctorRequest
+	if err := c.Read(&input); err != nil {
+		r.logger.With(c.Request.Context()).Info(err)
+		return errors.BadRequest("")
+	}
+
+	doctor, err := r.service.Update(c.Request.Context(), c.Param("id"), input)
+	if err != nil {
+		return err
+	}
+
+	return c.Write(doctor)
 }
