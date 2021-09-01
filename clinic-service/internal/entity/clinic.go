@@ -1,11 +1,10 @@
 package entity
 
 type Clinic struct {
-	Id                string `json:"clinicId"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	Address           `json:"address"`
-	AppointmentPrices map[string]uint `json:"appointmentPrices" db:"-"`
+	Id          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Address     `json:"address"`
 }
 
 type Address struct {
@@ -15,8 +14,8 @@ type Address struct {
 }
 
 type AppointmentTypePrice struct {
-	ClinicId          string `json:"clinicId"`
-	AppointmentTypeId string `json:"-" db:"appointment_type_id"`
-	AppointmentType   `json:"appointmentType"`
+	ClinicId          string `json:"clinicId" db:"pk"`
+	AppointmentTypeId string `json:"-" db:"pk"`
+	AppointmentType   `json:"appointmentType" db:"-"`
 	Price             uint `json:"price"`
 }

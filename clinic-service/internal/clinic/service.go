@@ -14,8 +14,9 @@ type Service interface {
 	GetAll(ctx context.Context) ([]entity.Clinic, error)
 	Create(ctx context.Context, req CreateClinicRequest) (entity.Clinic, error)
 	Update(ctx context.Context, clinicId string, req UpdateClinicRequest) (entity.Clinic, error)
-	AddAppointmentTypePrice(ctx context.Context, req AddAppointmentTypePriceRequest) error
+	AddAppointmentTypePrice(ctx context.Context, clinicId string, req AddAppointmentTypePriceRequest) (entity.AppointmentTypePrice, error)
 	GetAppointmentTypePrices(ctx context.Context, clinicId string) ([]entity.AppointmentTypePrice, error)
+	UpdateAppointmentTypePrice(ctx context.Context, clinicId string, req UpdateAppointmentTypePriceRequest) (entity.AppointmentTypePrice, error)
 }
 
 type CreateClinicRequest struct {
@@ -45,14 +46,24 @@ func (m UpdateClinicRequest) Validate() error {
 }
 
 type AddAppointmentTypePriceRequest struct {
-	ClinicId          string `json:"clinicId"`
 	AppointmentTypeId string `json:"appointmentTypeId"`
 	Price             uint   `json:"price"`
 }
 
 func (m AddAppointmentTypePriceRequest) Validate() error {
 	return validation.ValidateStruct(&m,
-		validation.Field(&m.ClinicId, validation.Required, validation.Length(36, 36)),
+		validation.Field(&m.AppointmentTypeId, validation.Required, validation.Length(36, 36)),
+		validation.Field(&m.Price, validation.Required, validation.Min(1)),
+	)
+}
+
+type UpdateAppointmentTypePriceRequest struct {
+	AppointmentTypeId string `json:"appointmentTypeId"`
+	Price             uint   `json:"price"`
+}
+
+func (m UpdateAppointmentTypePriceRequest) Validate() error {
+	return validation.ValidateStruct(&m,
 		validation.Field(&m.AppointmentTypeId, validation.Required, validation.Length(36, 36)),
 		validation.Field(&m.Price, validation.Required, validation.Min(1)),
 	)
@@ -84,11 +95,10 @@ func (s service) Create(ctx context.Context, req CreateClinicRequest) (entity.Cl
 
 	id := entity.GenerateID()
 	err := s.repo.Create(ctx, entity.Clinic{
-		Id:                id,
-		Name:              req.Name,
-		Description:       req.Description,
-		Address:           req.Address,
-		AppointmentPrices: make(map[string]uint),
+		Id:          id,
+		Name:        req.Name,
+		Description: req.Description,
+		Address:     req.Address,
 	})
 
 	if err != nil {
@@ -130,20 +140,48 @@ func (s service) GetAll(ctx context.Context) ([]entity.Clinic, error) {
 	return clinics, nil
 }
 
-func (s service) AddAppointmentTypePrice(ctx context.Context, req AddAppointmentTypePriceRequest) error {
-	clinic, err := s.repo.GetById(ctx, req.ClinicId)
+func (s service) AddAppointmentTypePrice(ctx context.Context, clinicId string, req AddAppointmentTypePriceRequest) (entity.AppointmentTypePrice, error) {
+	clinic, err := s.repo.GetById(ctx, clinicId)
 	if err != nil {
-		return err
+		return entity.AppointmentTypePrice{}, err
 	}
 
 	appointmentType, err := s.appointmentTypeRepo.GetById(ctx, req.AppointmentTypeId)
 	if err != nil {
-		return err
+		return entity.AppointmentTypePrice{}, err
 	}
 
-	clinic.AppointmentPrices[appointmentType.Id] = req.Price
+	price := entity.AppointmentTypePrice{
+		ClinicId:          clinic.Id,
+		AppointmentTypeId: appointmentType.Id,
+		Price:             req.Price,
+	}
 
-	return nil
+	err = s.repo.AddAppointmentTypePrice(ctx, price)
+
+	return price, err
+}
+
+func (s service) UpdateAppointmentTypePrice(ctx context.Context, clinicId string, req UpdateAppointmentTypePriceRequest) (entity.AppointmentTypePrice, error) {
+	clinic, err := s.repo.GetById(ctx, clinicId)
+	if err != nil {
+		return entity.AppointmentTypePrice{}, err
+	}
+
+	appointmentType, err := s.appointmentTypeRepo.GetById(ctx, req.AppointmentTypeId)
+	if err != nil {
+		return entity.AppointmentTypePrice{}, err
+	}
+
+	price := entity.AppointmentTypePrice{
+		ClinicId:          clinic.Id,
+		AppointmentTypeId: appointmentType.Id,
+		Price:             req.Price,
+	}
+
+	err = s.repo.UpdateAppointmentTypePrice(ctx, price)
+
+	return price, err
 }
 
 func (s service) GetAppointmentTypePrices(ctx context.Context, clinicId string) ([]entity.AppointmentTypePrice, error) {

@@ -93,6 +93,11 @@ func buildHandler(logger log.Logger, db *dbcontext.DB, cfg *config.Config) http.
 	appointmentTypeRepo := appointment_type.NewRepository(db, logger)
 	clinicRepo := clinic.NewRepository(db, logger)
 
+	appointment_type.RegisterHandlers(rg.Group(""),
+		appointment_type.NewService(appointmentTypeRepo, logger),
+		authHandler, logger,
+	)
+
 	clinic.RegisterHandlers(rg.Group(""),
 		clinic.NewService(clinicRepo, appointmentTypeRepo, logger),
 		authHandler, logger,

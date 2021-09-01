@@ -17,6 +17,8 @@ func RegisterHandlers(r *routing.RouteGroup, service Service, authHandler routin
 	r.Get("/clinics/<id>/prices", res.getPrices)
 	r.Post("/clinics", res.create)
 	r.Put("/clinics/<id>", res.update)
+	r.Post("/clinics/<id>/prices", res.addPrice)
+	r.Put("/clinics/<id>/prices", res.updatePrice)
 }
 
 type resource struct {
@@ -57,13 +59,42 @@ func (r resource) create(c *routing.Context) error {
 }
 
 func (r resource) update(c *routing.Context) error {
-	var input UpdateClinicRequest
-	if err := c.Read(&input); err != nil {
+	var request UpdateClinicRequest
+	if err := c.Read(&request); err != nil {
 		r.logger.With(c.Request.Context()).Info(err)
 		return errors.BadRequest("")
 	}
 
-	clinic, err := r.service.Update(c.Request.Context(), c.Param("id"), input)
+	clinic, err := r.service.Update(c.Request.Context(), c.Param("id"), request)
+	if err != nil {
+		return err
+	}
+
+	return c.Write(clinic)
+}
+
+func (r resource) addPrice(c *routing.Context) error {
+	var request AddAppointmentTypePriceRequest
+	if err := c.Read(&request); err != nil {
+		r.logger.With(c.Request.Context()).Info(err)
+		return errors.BadRequest("")
+	}
+	price, err := r.service.AddAppointmentTypePrice((c.Request.Context()), c.Param("id"), request)
+	if err != nil {
+		return err
+	}
+
+	return c.WriteWithStatus(price, http.StatusCreated)
+}
+
+func (r resource) updatePrice(c *routing.Context) error {
+	var request UpdateAppointmentTypePriceRequest
+	if err := c.Read(&request); err != nil {
+		r.logger.With(c.Request.Context()).Info(err)
+		return errors.BadRequest("")
+	}
+
+	clinic, err := r.service.UpdateAppointmentTypePrice(c.Request.Context(), c.Param("id"), request)
 	if err != nil {
 		return err
 	}

@@ -15,6 +15,8 @@ type Repository interface {
 	GetAll(ctx context.Context) ([]entity.Clinic, error)
 	GetById(ctx context.Context, id string) (entity.Clinic, error)
 	GetAppointmentTypePrices(ctx context.Context, clinicId string) ([]entity.AppointmentTypePrice, error)
+	AddAppointmentTypePrice(ctx context.Context, appointmentTypePrice entity.AppointmentTypePrice) error
+	UpdateAppointmentTypePrice(ctx context.Context, appointmentTypePrice entity.AppointmentTypePrice) error
 }
 
 type repository struct {
@@ -53,4 +55,12 @@ func (r repository) GetAppointmentTypePrices(ctx context.Context, clinicId strin
 		Where(dbx.HashExp{"clinic_id": clinicId}).
 		All(&appointmentTypePrices)
 	return appointmentTypePrices, err
+}
+
+func (r repository) AddAppointmentTypePrice(ctx context.Context, appointmentTypePrice entity.AppointmentTypePrice) error {
+	return r.db.With(ctx).Model(&appointmentTypePrice).Insert()
+}
+
+func (r repository) UpdateAppointmentTypePrice(ctx context.Context, appointmentTypePrice entity.AppointmentTypePrice) error {
+	return r.db.With(ctx).Model(&appointmentTypePrice).Update()
 }
