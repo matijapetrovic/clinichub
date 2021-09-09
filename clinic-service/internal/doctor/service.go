@@ -2,17 +2,25 @@ package doctor
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/url"
+	"sort"
+	"time"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	appointment_type "github.com/matijapetrovic/clinichub/clinic-service/internal/appointment-type"
 	"github.com/matijapetrovic/clinichub/clinic-service/internal/clinic"
 	"github.com/matijapetrovic/clinichub/clinic-service/internal/entity"
+	"github.com/matijapetrovic/clinichub/clinic-service/pkg/httpclient"
 	"github.com/matijapetrovic/clinichub/clinic-service/pkg/log"
 )
 
 type Service interface {
+	GetById(ctx context.Context, id string) (entity.Doctor, error)
 	GetAll(ctx context.Context) ([]entity.Doctor, error)
-	GetByClinicId(ctx context.Context, clinicId string) ([]entity.Doctor, error)
+	GetByClinicId(request *http.Request, clinicId string, req GetByClinicIdRequest) ([]entity.Doctor, error)
 	Create(ctx context.Context, req CreateDoctorRequest) (entity.Doctor, error)
 	Update(ctx context.Context, doctorId string, req UpdateDoctorRequest) (entity.Doctor, error)
 }
@@ -51,6 +59,19 @@ func (m UpdateDoctorRequest) Validate() error {
 	)
 }
 
+type GetByClinicIdRequest struct {
+	AppointmentTypeId string `json:"appointmentTypeId"`
+	Date              string `json:"date"`
+}
+
+func (m GetByClinicIdRequest) Validate() error {
+	return validation.ValidateStruct(&m,
+
+		validation.Field(&m.AppointmentTypeId, validation.Length(36, 36)),
+		validation.Field(&m.Date, validation.Required, validation.Date("30-12-1970"), validation.Min(time.Now())),
+	)
+}
+
 type service struct {
 	repo                Repository
 	clinicRepo          clinic.Repository
@@ -60,6 +81,28 @@ type service struct {
 
 func NewService(repo Repository, clinicRepo clinic.Repository, appointmentTypeRepo appointment_type.Repository, logger log.Logger) Service {
 	return service{repo, clinicRepo, appointmentTypeRepo, logger}
+}
+
+func (s service) GetById(ctx context.Context, id string) (entity.Doctor, error) {
+	doctor, err := s.repo.GetById(ctx, id)
+	if err != nil {
+		return entity.Doctor{}, err
+	}
+
+	appointmentPrice, err := s.clinicRepo.GetAppointmentTypePrice(ctx, doctor.ClinicId, doctor.SpecializationId)
+	if err != nil {
+		return entity.Doctor{}, err
+	}
+
+	appointmentType, err := s.appointmentTypeRepo.GetById(ctx, doctor.SpecializationId)
+	if err != nil {
+		return entity.Doctor{}, err
+	}
+
+	doctor.AppointmentType = appointmentType
+	doctor.AppointmentTypePrice = appointmentPrice.Price
+
+	return doctor, nil
 }
 
 func (s service) Create(ctx context.Context, req CreateDoctorRequest) (entity.Doctor, error) {
@@ -122,18 +165,98 @@ func (s service) Update(ctx context.Context, doctorId string, req UpdateDoctorRe
 	return doctor, nil
 }
 
-func (s service) GetByClinicId(ctx context.Context, clinicId string) ([]entity.Doctor, error) {
-	doctors, err := s.repo.GetByClinicId(ctx, clinicId)
+type Appointment struct {
+	Id                string    `json:"id"`
+	ClinicId          string    `json:"clinicId"`
+	DoctorId          string    `json:"doctorId"`
+	PatientId         string    `json:"patientId"`
+	AppointmentTypeId string    `json:"appointmentTypeId"`
+	Price             uint      `json:"price"`
+	Time              time.Time `json:"time"`
+}
+
+func (s service) GetByClinicId(request *http.Request, clinicId string, req GetByClinicIdRequest) ([]entity.Doctor, error) {
+	if req.AppointmentTypeId == "" {
+		doctors, err := s.repo.GetByClinicId(request.Context(), clinicId)
+		if err != nil {
+			return nil, err
+		}
+
+		for i, doctor := range doctors {
+			specialization, err := s.appointmentTypeRepo.GetById(request.Context(), doctor.SpecializationId)
+			if err != nil {
+				return nil, err
+			}
+			doctor.AppointmentType = specialization
+			doctors[i] = doctor
+		}
+
+		return doctors, nil
+	}
+	doctors, err := s.repo.GetByClinicIdAndSpecializationId(request.Context(), clinicId, req.AppointmentTypeId)
+	if err != nil {
+		return nil, err
+	}
+
+	appointmentPrice, err := s.clinicRepo.GetAppointmentTypePrice(request.Context(), clinicId, req.AppointmentTypeId)
 	if err != nil {
 		return nil, err
 	}
 
 	for i, doctor := range doctors {
-		specialization, err := s.appointmentTypeRepo.GetById(ctx, doctor.SpecializationId)
+
+		url, err := url.Parse("http://localhost:8083/v1/appointments")
 		if err != nil {
 			return nil, err
 		}
-		doctor.AppointmentType = specialization
+
+		queryParamMap := map[string]string{
+			"doctorId": doctor.Id,
+			"date":     req.Date,
+		}
+
+		client := httpclient.NewJsonClient(
+			"GET",
+			url,
+			func(ctx context.Context, r *http.Response) (interface{}, error) {
+				var appointment []Appointment
+				err := json.NewDecoder(r.Body).Decode(&appointment)
+				if err != nil {
+					return nil, err
+				}
+				return appointment, nil
+			},
+			request.Header.Get("Authorization"),
+			httpclient.QueryParamBeforeFunc(queryParamMap),
+		)
+
+		res, err := client.Endpoint()(context.Background(), struct{}{})
+		if err != nil {
+			return nil, err
+		}
+		appointments, ok := res.([]Appointment)
+		if !ok {
+			return nil, errors.New("unexpected error")
+		}
+		workStart, _ := entity.ParseTime(doctor.WorkStart)
+		workEnd, _ := entity.ParseTime(doctor.WorkEnd)
+
+		workingHours := entity.GetHours(workStart, workEnd)
+
+		for _, appointment := range appointments {
+			hour, _, _ := appointment.Time.Clock()
+			delete(workingHours, uint(hour))
+		}
+
+		sortedWorkingHours := make([]string, 0, len(workingHours))
+		for k, _ := range workingHours {
+			time := entity.Time{Hour: k, Minute: 0}.ToString()
+			sortedWorkingHours = append(sortedWorkingHours, time)
+		}
+
+		sort.Strings(sortedWorkingHours)
+		doctor.AvailableHours = sortedWorkingHours
+		doctor.AppointmentTypePrice = appointmentPrice.Price
 		doctors[i] = doctor
 	}
 

@@ -6,6 +6,7 @@ import (
 	routing "github.com/go-ozzo/ozzo-routing/v2"
 	"github.com/matijapetrovic/clinichub/clinic-service/internal/errors"
 	"github.com/matijapetrovic/clinichub/clinic-service/pkg/log"
+	"github.com/matijapetrovic/clinichub/clinic-service/pkg/pagination"
 )
 
 func RegisterHandlers(r *routing.RouteGroup, service Service, authHandler routing.Handler, logger log.Logger) {
@@ -13,7 +14,8 @@ func RegisterHandlers(r *routing.RouteGroup, service Service, authHandler routin
 
 	// r.Use(authHandler)
 
-	r.Get("/clinics", res.getAll)
+	r.Get("/clinics", res.query)
+	r.Get("/clinics/<id>", res.getById)
 	r.Get("/clinics/<id>/prices", res.getPrices)
 	r.Post("/clinics", res.create)
 	r.Put("/clinics/<id>", res.update)
@@ -26,9 +28,33 @@ type resource struct {
 	logger  log.Logger
 }
 
-func (r resource) getAll(c *routing.Context) error {
-	clinics, err := r.service.GetAll(c.Request.Context())
+func (r resource) getById(c *routing.Context) error {
+	clinic, err := r.service.GetById(c.Request.Context(), c.Param("id"))
 	if err != nil {
+		return err
+	}
+
+	return c.Write(clinic)
+}
+
+func (r resource) query(c *routing.Context) error {
+	ctx := c.Request.Context()
+	count, err := r.service.Count(ctx)
+	if err != nil {
+		return err
+	}
+	pages := pagination.NewFromRequest(c.Request, count)
+	clinics, err := r.service.Query(ctx, QueryClinicsRequest{
+		AppointmentTypeId: c.Request.URL.Query().Get("appointmentTypeId"),
+		Date:              c.Request.URL.Query().Get("date"),
+		Limit:             pages.Limit(),
+		Offset:            pages.Offset(),
+	})
+
+	if err != nil {
+		if err.Error() == "bad request" {
+			return c.WriteWithStatus(err.Error(), http.StatusBadRequest)
+		}
 		return err
 	}
 

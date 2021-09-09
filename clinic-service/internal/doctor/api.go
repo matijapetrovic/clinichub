@@ -14,6 +14,7 @@ func RegisterHandlers(r *routing.RouteGroup, service Service, authHandler routin
 	// r.Use(authHandler)
 
 	r.Get("/doctors", res.getAll)
+	r.Get("/doctors/<id>", res.getById)
 	r.Get("/clinics/<clinicId>/doctors", res.getByClinicId)
 
 	r.Post("/doctors", res.create)
@@ -26,12 +27,26 @@ type resource struct {
 }
 
 func (r resource) getByClinicId(c *routing.Context) error {
-	doctors, err := r.service.GetByClinicId(c.Request.Context(), c.Param("clinicId"))
+	appointmentTypeId := c.Request.URL.Query().Get("appointmentTypeId")
+	date := c.Request.URL.Query().Get("date")
+	doctors, err := r.service.GetByClinicId(c.Request, c.Param("clinicId"), GetByClinicIdRequest{
+		AppointmentTypeId: appointmentTypeId,
+		Date:              date,
+	})
 	if err != nil {
 		return err
 	}
 
 	return c.Write(doctors)
+}
+
+func (r resource) getById(c *routing.Context) error {
+	doctor, err := r.service.GetById(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		return err
+	}
+
+	return c.Write(doctor)
 }
 
 func (r resource) getAll(c *routing.Context) error {

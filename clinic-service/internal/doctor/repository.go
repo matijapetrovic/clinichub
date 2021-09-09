@@ -15,6 +15,7 @@ type Repository interface {
 	GetById(ctx context.Context, id string) (entity.Doctor, error)
 	GetAll(ctx context.Context) ([]entity.Doctor, error)
 	GetByClinicId(ctx context.Context, clinicId string) ([]entity.Doctor, error)
+	GetByClinicIdAndSpecializationId(ctx context.Context, clinicId string, specializationId string) ([]entity.Doctor, error)
 }
 
 type repository struct {
@@ -31,6 +32,15 @@ func (r repository) GetByClinicId(ctx context.Context, clinicId string) ([]entit
 	err := r.db.With(ctx).
 		Select().
 		Where(dbx.HashExp{"clinic_id": clinicId}).
+		All(&doctors)
+	return doctors, err
+}
+
+func (r repository) GetByClinicIdAndSpecializationId(ctx context.Context, clinicId string, specializationId string) ([]entity.Doctor, error) {
+	var doctors []entity.Doctor
+	err := r.db.With(ctx).
+		Select().
+		Where(dbx.HashExp{"clinic_id": clinicId, "specialization_id": specializationId}).
 		All(&doctors)
 	return doctors, err
 }

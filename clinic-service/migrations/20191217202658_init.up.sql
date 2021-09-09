@@ -30,10 +30,8 @@ CREATE TABLE doctor (
   id VARCHAR(255) NOT NULL,
   first_name VARCHAR(255) NOT NULL,
   last_name VARCHAR(255) NOT NULL,
-  work_start_hour INT NOT NULL,
-  work_start_minute INT NOT NULL,
-  work_end_hour INT NOT NULL,
-  work_end_minute INT NOT NULL,
+  work_start VARCHAR(255) NOT NULL,
+  work_end VARCHAR(255) NOT NULL,
   clinic_id VARCHAR(255) NOT NULL,
   specialization_id VARCHAR(255) NOT NULL,
 

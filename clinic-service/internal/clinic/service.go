@@ -2,6 +2,8 @@ package clinic
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	appointment_type "github.com/matijapetrovic/clinichub/clinic-service/internal/appointment-type"
@@ -11,12 +13,29 @@ import (
 
 type Service interface {
 	GetById(ctx context.Context, id string) (entity.Clinic, error)
-	GetAll(ctx context.Context) ([]entity.Clinic, error)
+	Count(ctx context.Context) (int, error)
+	Query(ctx context.Context, req QueryClinicsRequest) ([]entity.Clinic, error)
 	Create(ctx context.Context, req CreateClinicRequest) (entity.Clinic, error)
 	Update(ctx context.Context, clinicId string, req UpdateClinicRequest) (entity.Clinic, error)
 	AddAppointmentTypePrice(ctx context.Context, clinicId string, req AddAppointmentTypePriceRequest) (entity.AppointmentTypePrice, error)
 	GetAppointmentTypePrices(ctx context.Context, clinicId string) ([]entity.AppointmentTypePrice, error)
 	UpdateAppointmentTypePrice(ctx context.Context, clinicId string, req UpdateAppointmentTypePriceRequest) (entity.AppointmentTypePrice, error)
+}
+
+type QueryClinicsRequest struct {
+	AppointmentTypeId string `json:"appointmentTypeId"`
+	Date              string `json:"date"`
+	Limit             int    `json:"limit"`
+	Offset            int    `json:"offset"`
+}
+
+func (m QueryClinicsRequest) Validate() error {
+	return validation.ValidateStruct(&m,
+		validation.Field(&m.AppointmentTypeId, validation.Length(36, 36)),
+		validation.Field(&m.Date, validation.Date("1970-12-30"), validation.Min(time.Now())),
+		validation.Field(&m.Limit, validation.Min(1)),
+		validation.Field(&m.Offset, validation.Min(0)),
+	)
 }
 
 type CreateClinicRequest struct {
@@ -130,14 +149,34 @@ func (s service) Update(ctx context.Context, clinicId string, req UpdateClinicRe
 	return clinic, nil
 }
 
-func (s service) GetAll(ctx context.Context) ([]entity.Clinic, error) {
-	clinics, err := s.repo.GetAll(ctx)
+func (s service) Count(ctx context.Context) (int, error) {
+	return s.repo.Count(ctx)
+}
 
-	if err != nil {
-		return nil, err
+func (s service) Query(ctx context.Context, req QueryClinicsRequest) ([]entity.Clinic, error) {
+	if req.AppointmentTypeId != "" && req.Date == "" || req.AppointmentTypeId == "" && req.Date != "" {
+		return nil, errors.New("bad request")
 	}
+	if req.AppointmentTypeId == "" && req.Date == "" {
+		clinics, err := s.repo.GetPaged(ctx, req.Offset, req.Limit)
+		if err != nil {
+			return nil, err
+		}
 
-	return clinics, nil
+		return clinics, nil
+	} else {
+		clinicIds, err := s.repo.GetIdsByHasPrice(ctx, req.AppointmentTypeId)
+		if err != nil {
+			return nil, err
+		}
+
+		clinics, err := s.repo.GetByIdList(ctx, clinicIds)
+		if err != nil {
+			return nil, err
+		}
+
+		return clinics, err
+	}
 }
 
 func (s service) AddAppointmentTypePrice(ctx context.Context, clinicId string, req AddAppointmentTypePriceRequest) (entity.AppointmentTypePrice, error) {
