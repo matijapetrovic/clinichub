@@ -15,6 +15,8 @@ type Repository interface {
 	GetById(ctx context.Context, id string) (entity.Appointment, error)
 	GetDoctorAppointments(ctx context.Context, doctorId string, dateStart time.Time, dateEnd time.Time) ([]entity.Appointment, error)
 	GetByDoctorIdAndTime(ctx context.Context, doctorId string, time time.Time) (entity.Appointment, error)
+	GetByPatientIdAndDate(ctx context.Context, patientId string, startDate time.Time, endDate time.Time) ([]entity.Appointment, error)
+	GetClinicProfit(ctx context.Context, clinicId string, startDate time.Time, endDate time.Time) (int, error)
 }
 
 type repository struct {
@@ -24,6 +26,16 @@ type repository struct {
 
 func NewRepository(db *dbcontext.DB, logger log.Logger) Repository {
 	return repository{db, logger}
+}
+
+func (r repository) GetClinicProfit(ctx context.Context, clinicId string, startDate time.Time, endDate time.Time) (int, error) {
+	var profit int
+	dbExp := dbx.NewExp("clinic_id={:clinicId}", dbx.Params{"clinicId": clinicId})
+	dbExp = dbx.And(dbExp, dbx.NewExp("time>={:startDate}", dbx.Params{"startDate": startDate}))
+	dbExp = dbx.And(dbExp, dbx.NewExp("time<={:endDate}", dbx.Params{"endDate": endDate}))
+
+	err := r.db.With(ctx).Select("SUM(price) AS profit").From("appointment").Where(dbExp).Row(&profit)
+	return profit, err
 }
 
 func (r repository) Create(ctx context.Context, appointment entity.Appointment) error {
@@ -44,6 +56,25 @@ func (r repository) GetByDoctorIdAndTime(ctx context.Context, doctorId string, t
 		One(&appointment)
 
 	return appointment, err
+}
+
+func (r repository) GetByPatientIdAndDate(ctx context.Context, patientId string, startDate time.Time, endDate time.Time) ([]entity.Appointment, error) {
+	var appointments []entity.Appointment
+
+	dbExp := dbx.NewExp("patient_id={:patientId}", dbx.Params{"patientId": patientId})
+	if !startDate.IsZero() {
+		dbExp = dbx.And(dbExp, dbx.NewExp("time>={:startDate}", dbx.Params{"startDate": startDate}))
+	}
+	if !endDate.IsZero() {
+		dbExp = dbx.And(dbExp, dbx.NewExp("time<={:endDate}", dbx.Params{"endDate": endDate}))
+	}
+
+	err := r.db.With(ctx).
+		Select().
+		Where(dbExp).
+		All(&appointments)
+
+	return appointments, err
 }
 
 func (r repository) GetDoctorAppointments(ctx context.Context, doctorId string, dateStart time.Time, dateEnd time.Time) ([]entity.Appointment, error) {

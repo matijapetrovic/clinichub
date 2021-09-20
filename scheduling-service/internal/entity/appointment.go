@@ -10,4 +10,8 @@ type Appointment struct {
 	AppointmentTypeId string    `json:"appointmentTypeId"`
 	Price             int       `json:"price"`
 	Time              time.Time `json:"time"`
+
+	DoctorFullName      string `json:"doctorFullName" db:"-"`
+	ClinicName          string `json:"clinicName" db:"-"`
+	AppointmentTypeName string `json:"name" db:"-"`
 }

@@ -27,6 +27,7 @@ func DefaultHttpRequestEncoder(_ context.Context, r *http.Request, request inter
 		return err
 	}
 	r.Body = ioutil.NopCloser(&buf)
+	r.Close = true
 	return nil
 }
 

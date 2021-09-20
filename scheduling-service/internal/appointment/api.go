@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	routing "github.com/go-ozzo/ozzo-routing/v2"
+	"github.com/matijapetrovic/clinichub/scheduling-service/internal/auth"
 	"github.com/matijapetrovic/clinichub/scheduling-service/internal/errors"
 	"github.com/matijapetrovic/clinichub/scheduling-service/pkg/log"
 )
@@ -11,12 +12,12 @@ import (
 func RegisterHandlers(r *routing.RouteGroup, service Service, authHandler routing.Handler, logger log.Logger) {
 	res := resource{service, logger}
 
-	// r.Use(authHandler)
+	r.Use(authHandler)
 
 	r.Get("/appointments", res.query)
-
+	r.Get("/doctors/<id>/appointments", res.getDoctorAppointments)
 	r.Post("/appointments", res.schedule)
-
+	r.Get("/clinics/<id>/profit", res.getProfit)
 }
 
 type resource struct {
@@ -24,10 +25,43 @@ type resource struct {
 	logger  log.Logger
 }
 
+func (r resource) getProfit(c *routing.Context) error {
+	startDate := c.Request.URL.Query().Get("startDate")
+	endDate := c.Request.URL.Query().Get("endDate")
+
+	profit, err := r.service.GetClinicProfit(c.Request.Context(), GetClinicReportRequest{
+		ClinicId:  c.Param("id"),
+		StartDate: startDate,
+		EndDate:   endDate,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return c.Write(profit)
+}
+
 func (r resource) query(c *routing.Context) error {
-	clinics, err := r.service.GetDoctorAppointments(c.Request.Context(), GetDoctorAppointmentsRequest{
+	user := auth.CurrentUser(c.Request.Context())
+	startDate := c.Request.URL.Query().Get("startDate")
+	endDate := c.Request.URL.Query().Get("endDate")
+	appointments, err := r.service.GetPatientAppointments(c.Request, GetPatientAppointmentsRequest{
+		PatientId: user.GetID(),
+		StartDate: startDate,
+		EndDate:   endDate,
+	})
+	if err != nil {
+		return err
+	}
+
+	return c.Write(appointments)
+}
+
+func (r resource) getDoctorAppointments(c *routing.Context) error {
+	appointments, err := r.service.GetDoctorAppointments(c.Request.Context(), GetDoctorAppointmentsRequest{
 		Date:     c.Request.URL.Query().Get("date"),
-		DoctorId: c.Request.URL.Query().Get("doctorId"),
+		DoctorId: c.Param("id"),
 	})
 
 	if err != nil {
@@ -41,7 +75,7 @@ func (r resource) query(c *routing.Context) error {
 	// 	return err
 	// }
 
-	return c.Write(clinics)
+	return c.Write(appointments)
 }
 
 func (r resource) schedule(c *routing.Context) error {
