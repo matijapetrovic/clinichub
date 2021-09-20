@@ -9,10 +9,10 @@ import (
 
 func RegisterHandlers(r *routing.RouteGroup, service Service, authHandler routing.Handler, logger log.Logger) {
 	res := resource{service, logger}
+	r.Get("/clinics/<id>/average-rating", res.getRating)
 
 	r.Use(authHandler)
 
-	r.Get("/clinics/<id>/average-rating", res.getRating)
 	r.Get("/clinics/to-rate", res.getAvailableRatings)
 	r.Post("/clinics/<id>/ratings", res.rateDoctor)
 }

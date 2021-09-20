@@ -11,13 +11,13 @@ import (
 
 func RegisterHandlers(r *routing.RouteGroup, service Service, authHandler routing.Handler, logger log.Logger) {
 	res := resource{service, logger}
+	r.Get("/clinics/<id>/profit", res.getProfit)
 
 	r.Use(authHandler)
 
 	r.Get("/appointments", res.query)
 	r.Get("/doctors/<id>/appointments", res.getDoctorAppointments)
 	r.Post("/appointments", res.schedule)
-	r.Get("/clinics/<id>/profit", res.getProfit)
 }
 
 type resource struct {
