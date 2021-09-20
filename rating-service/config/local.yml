@@ -1,0 +1,2 @@
+dsn: "root:verysecretyes@tcp(127.0.0.1:3308)/rating_db?parseTime=true"
+jwt_signing_key: "LxsKJywDL5O5PvgODZhBH12KE6k2yL8E"
