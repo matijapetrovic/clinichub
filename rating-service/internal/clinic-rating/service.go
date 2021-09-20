@@ -15,6 +15,7 @@ import (
 	"github.com/matijapetrovic/clinichub/rating-service/pkg/log"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"github.com/matijapetrovic/clinichub/rating-service/internal/auth"
 	"github.com/matijapetrovic/clinichub/rating-service/internal/entity"
 )
 
@@ -169,11 +170,12 @@ func (s service) RateClinic(ctx context.Context, clinicId string, req RateClinic
 	if err := req.Validate(); err != nil {
 		return entity.ClinicRating{}, err
 	}
+	user := auth.CurrentUser(ctx)
 	id := entity.GenerateID()
 	err := s.repo.RateClinic(ctx, entity.ClinicRating{
 		ID:        id,
 		ClinicId:  clinicId,
-		PatientId: "d4b9872d-55de-424b-864d-95e4f9b88ca5",
+		PatientId: user.GetID(),
 		Rating:    req.Rating,
 	})
 	if err != nil {

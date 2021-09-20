@@ -35,7 +35,7 @@ func (r repository) GetRating(ctx context.Context, patientId string, doctorID st
 func (r repository) GetDoctorRating(ctx context.Context, doctorId string) (entity.AverageRating, error) {
 	var count int
 	var rating float32
-	err := r.db.With(ctx).Select("COUNT(rating) AS count", "AVG(rating) AS rating").Where(dbx.HashExp{"doctor_id": doctorId}).Row(&count, &rating)
+	err := r.db.With(ctx).Select("COUNT(rating) AS count", "AVG(rating) AS rating").From("doctor_rating").Where(dbx.HashExp{"doctor_id": doctorId}).Row(&count, &rating)
 
 	return entity.AverageRating{Count: count, Rating: rating}, err
 }
