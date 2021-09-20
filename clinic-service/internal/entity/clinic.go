@@ -5,6 +5,8 @@ type Clinic struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Address     `json:"address"`
+	Rating      `json:"rating" db:"-"`
+	Price       uint `json:"price" db:"-"`
 }
 
 type Address struct {
@@ -18,4 +20,9 @@ type AppointmentTypePrice struct {
 	AppointmentTypeId string `json:"-" db:"pk"`
 	AppointmentType   `json:"appointmentType" db:"-"`
 	Price             uint `json:"price"`
+}
+
+type Rating struct {
+	Rating float32 `json:"rating"`
+	Count  int     `json:"count"`
 }

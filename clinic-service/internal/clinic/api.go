@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	routing "github.com/go-ozzo/ozzo-routing/v2"
+	"github.com/matijapetrovic/clinichub/clinic-service/internal/auth"
 	"github.com/matijapetrovic/clinichub/clinic-service/internal/errors"
 	"github.com/matijapetrovic/clinichub/clinic-service/pkg/log"
 	"github.com/matijapetrovic/clinichub/clinic-service/pkg/pagination"
@@ -12,7 +13,7 @@ import (
 func RegisterHandlers(r *routing.RouteGroup, service Service, authHandler routing.Handler, logger log.Logger) {
 	res := resource{service, logger}
 
-	// r.Use(authHandler)
+	r.Use(authHandler)
 
 	r.Get("/clinics", res.query)
 	r.Get("/clinics/<id>", res.getById)
@@ -29,7 +30,7 @@ type resource struct {
 }
 
 func (r resource) getById(c *routing.Context) error {
-	clinic, err := r.service.GetById(c.Request.Context(), c.Param("id"))
+	clinic, err := r.service.GetById(c.Request, c.Param("id"))
 	if err != nil {
 		return err
 	}
@@ -44,7 +45,7 @@ func (r resource) query(c *routing.Context) error {
 		return err
 	}
 	pages := pagination.NewFromRequest(c.Request, count)
-	clinics, err := r.service.Query(ctx, QueryClinicsRequest{
+	clinics, err := r.service.Query(c.Request, QueryClinicsRequest{
 		AppointmentTypeId: c.Request.URL.Query().Get("appointmentTypeId"),
 		Date:              c.Request.URL.Query().Get("date"),
 		Limit:             pages.Limit(),
@@ -71,6 +72,10 @@ func (r resource) getPrices(c *routing.Context) error {
 }
 
 func (r resource) create(c *routing.Context) error {
+	user := auth.CurrentUser(c.Request.Context())
+	if user.GetRole() != "admin" {
+		return c.WriteWithStatus("Forbidden", http.StatusForbidden)
+	}
 	var request CreateClinicRequest
 	if err := c.Read(&request); err != nil {
 		r.logger.With(c.Request.Context()).Info(err)

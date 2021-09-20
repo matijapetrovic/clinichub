@@ -17,6 +17,7 @@ type Doctor struct {
 	AppointmentType      `json:"specialization" db:"-"`
 	AppointmentTypePrice uint     `json:"specializationPrice" db:"-"`
 	AvailableHours       []string `json:"availableHours" db:"-"`
+	Rating               `json:"rating" db:"-"`
 }
 
 type Time struct {

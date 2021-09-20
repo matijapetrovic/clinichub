@@ -204,43 +204,13 @@ func (s service) GetByClinicId(request *http.Request, clinicId string, req GetBy
 	}
 
 	for i, doctor := range doctors {
-
-		url, err := url.Parse("http://localhost:8083/v1/appointments")
+		appointments, err := getDoctorAppointments(doctor.Id, req.Date, request.Header.Get("Authorization"))
 		if err != nil {
 			return nil, err
 		}
 
-		queryParamMap := map[string]string{
-			"doctorId": doctor.Id,
-			"date":     req.Date,
-		}
-
-		client := httpclient.NewJsonClient(
-			"GET",
-			url,
-			func(ctx context.Context, r *http.Response) (interface{}, error) {
-				var appointment []Appointment
-				err := json.NewDecoder(r.Body).Decode(&appointment)
-				if err != nil {
-					return nil, err
-				}
-				return appointment, nil
-			},
-			request.Header.Get("Authorization"),
-			httpclient.QueryParamBeforeFunc(queryParamMap),
-		)
-
-		res, err := client.Endpoint()(context.Background(), struct{}{})
-		if err != nil {
-			return nil, err
-		}
-		appointments, ok := res.([]Appointment)
-		if !ok {
-			return nil, errors.New("unexpected error")
-		}
 		workStart, _ := entity.ParseTime(doctor.WorkStart)
 		workEnd, _ := entity.ParseTime(doctor.WorkEnd)
-
 		workingHours := entity.GetHours(workStart, workEnd)
 
 		for _, appointment := range appointments {
@@ -257,10 +227,86 @@ func (s service) GetByClinicId(request *http.Request, clinicId string, req GetBy
 		sort.Strings(sortedWorkingHours)
 		doctor.AvailableHours = sortedWorkingHours
 		doctor.AppointmentTypePrice = appointmentPrice.Price
+
+		rating, err := getDoctorRating(doctor.Id, request.Header.Get("Authorization"))
+		if err != nil {
+			return nil, err
+		}
+		doctor.Rating = rating
 		doctors[i] = doctor
 	}
 
 	return doctors, nil
+}
+
+func getDoctorAppointments(doctorId string, date string, token string) ([]Appointment, error) {
+	url, err := url.Parse("http://localhost:8083/v1/doctors/" + doctorId + "/appointments")
+	if err != nil {
+		return nil, err
+	}
+
+	queryParamMap := map[string]string{
+		"date": date,
+	}
+
+	client := httpclient.NewJsonClient(
+		"GET",
+		url,
+		func(ctx context.Context, r *http.Response) (interface{}, error) {
+			var appointment []Appointment
+			err := json.NewDecoder(r.Body).Decode(&appointment)
+			if err != nil {
+				return nil, err
+			}
+			return appointment, nil
+		},
+		token,
+		httpclient.QueryParamBeforeFunc(queryParamMap),
+	)
+
+	res, err := client.Endpoint()(context.Background(), struct{}{})
+	if err != nil {
+		return nil, err
+	}
+	appointments, ok := res.([]Appointment)
+	if !ok {
+		return nil, errors.New("unexpected error")
+	}
+
+	return appointments, nil
+}
+
+func getDoctorRating(doctorId string, token string) (entity.Rating, error) {
+	url, err := url.Parse("http://localhost:8082/v1/doctors/" + doctorId + "/average-rating")
+	if err != nil {
+		return entity.Rating{}, err
+	}
+
+	client := httpclient.NewJsonClient(
+		"GET",
+		url,
+		func(ctx context.Context, r *http.Response) (interface{}, error) {
+			var rating entity.Rating
+			err := json.NewDecoder(r.Body).Decode(&rating)
+			if err != nil {
+				return nil, err
+			}
+			return rating, nil
+		},
+		token,
+		nil,
+	)
+
+	res, err := client.Endpoint()(context.Background(), struct{}{})
+	if err != nil {
+		return entity.Rating{}, err
+	}
+	rating, ok := res.(entity.Rating)
+	if !ok {
+		return entity.Rating{}, errors.New("unexpected error")
+	}
+
+	return rating, nil
 }
 
 func (s service) GetAll(ctx context.Context) ([]entity.Doctor, error) {

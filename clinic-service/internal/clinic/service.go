@@ -2,19 +2,23 @@ package clinic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/url"
 	"time"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	appointment_type "github.com/matijapetrovic/clinichub/clinic-service/internal/appointment-type"
 	"github.com/matijapetrovic/clinichub/clinic-service/internal/entity"
+	"github.com/matijapetrovic/clinichub/clinic-service/pkg/httpclient"
 	"github.com/matijapetrovic/clinichub/clinic-service/pkg/log"
 )
 
 type Service interface {
-	GetById(ctx context.Context, id string) (entity.Clinic, error)
+	GetById(request *http.Request, id string) (entity.Clinic, error)
 	Count(ctx context.Context) (int, error)
-	Query(ctx context.Context, req QueryClinicsRequest) ([]entity.Clinic, error)
+	Query(request *http.Request, req QueryClinicsRequest) ([]entity.Clinic, error)
 	Create(ctx context.Context, req CreateClinicRequest) (entity.Clinic, error)
 	Update(ctx context.Context, clinicId string, req UpdateClinicRequest) (entity.Clinic, error)
 	AddAppointmentTypePrice(ctx context.Context, clinicId string, req AddAppointmentTypePriceRequest) (entity.AppointmentTypePrice, error)
@@ -98,11 +102,18 @@ func NewService(repo Repository, appointmentTypeRepo appointment_type.Repository
 	return service{repo, appointmentTypeRepo, logger}
 }
 
-func (s service) GetById(ctx context.Context, id string) (entity.Clinic, error) {
+func (s service) GetById(request *http.Request, id string) (entity.Clinic, error) {
+	ctx := request.Context()
 	clinic, err := s.repo.GetById(ctx, id)
 	if err != nil {
 		return entity.Clinic{}, err
 	}
+
+	rating, err := getClinicRating(clinic.Id, request.Header.Get("Authorization"))
+	if err != nil {
+		return entity.Clinic{}, err
+	}
+	clinic.Rating = rating
 
 	return clinic, nil
 }
@@ -153,7 +164,8 @@ func (s service) Count(ctx context.Context) (int, error) {
 	return s.repo.Count(ctx)
 }
 
-func (s service) Query(ctx context.Context, req QueryClinicsRequest) ([]entity.Clinic, error) {
+func (s service) Query(request *http.Request, req QueryClinicsRequest) ([]entity.Clinic, error) {
+	ctx := request.Context()
 	if req.AppointmentTypeId != "" && req.Date == "" || req.AppointmentTypeId == "" && req.Date != "" {
 		return nil, errors.New("bad request")
 	}
@@ -175,8 +187,56 @@ func (s service) Query(ctx context.Context, req QueryClinicsRequest) ([]entity.C
 			return nil, err
 		}
 
+		for idx, clinic := range clinics {
+			rating, err := getClinicRating(clinic.Id, request.Header.Get("Authorization"))
+			if err != nil {
+				return nil, err
+			}
+			clinic.Rating = rating
+
+			price, err := s.repo.GetAppointmentTypePrice(ctx, clinic.Id, req.AppointmentTypeId)
+			if err != nil {
+				return nil, err
+			}
+			clinic.Price = price.Price
+			clinics[idx] = clinic
+		}
+
 		return clinics, err
 	}
+}
+
+func getClinicRating(clinicId string, token string) (entity.Rating, error) {
+	url, err := url.Parse("http://localhost:8082/v1/clinics/" + clinicId + "/average-rating")
+	if err != nil {
+		return entity.Rating{}, err
+	}
+
+	client := httpclient.NewJsonClient(
+		"GET",
+		url,
+		func(ctx context.Context, r *http.Response) (interface{}, error) {
+			var rating entity.Rating
+			err := json.NewDecoder(r.Body).Decode(&rating)
+			if err != nil {
+				return nil, err
+			}
+			return rating, nil
+		},
+		token,
+		nil,
+	)
+
+	res, err := client.Endpoint()(context.Background(), struct{}{})
+	if err != nil {
+		return entity.Rating{}, err
+	}
+	rating, ok := res.(entity.Rating)
+	if !ok {
+		return entity.Rating{}, errors.New("unexpected error")
+	}
+
+	return rating, nil
 }
 
 func (s service) AddAppointmentTypePrice(ctx context.Context, clinicId string, req AddAppointmentTypePriceRequest) (entity.AppointmentTypePrice, error) {

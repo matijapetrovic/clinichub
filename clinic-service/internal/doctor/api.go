@@ -11,7 +11,7 @@ import (
 func RegisterHandlers(r *routing.RouteGroup, service Service, authHandler routing.Handler, logger log.Logger) {
 	res := resource{service, logger}
 
-	// r.Use(authHandler)
+	r.Use(authHandler)
 
 	r.Get("/doctors", res.getAll)
 	r.Get("/doctors/<id>", res.getById)

@@ -12,12 +12,19 @@ import (
 )
 
 func NewJsonClient(method string, target *url.URL, decode httptransport.DecodeResponseFunc, authorization string, requestFunc httptransport.RequestFunc) *httptransport.Client {
+	var beforeFunc httptransport.ClientOption
+	if requestFunc != nil {
+		beforeFunc = httptransport.ClientBefore(httptransport.SetRequestHeader("Authorization", authorization), requestFunc)
+	} else {
+		beforeFunc = httptransport.ClientBefore(httptransport.SetRequestHeader("Authorization", authorization))
+	}
+
 	return httptransport.NewClient(
 		method,
 		target,
 		httptransport.EncodeJSONRequest,
 		decode,
-		httptransport.ClientBefore(httptransport.SetRequestHeader("Authorization", authorization), requestFunc),
+		beforeFunc,
 	)
 }
 

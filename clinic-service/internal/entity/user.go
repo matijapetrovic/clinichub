@@ -4,6 +4,7 @@ package entity
 type User struct {
 	ID   string
 	Name string
+	Role string
 }
 
 // GetID returns the user ID.
@@ -14,4 +15,8 @@ func (u User) GetID() string {
 // GetName returns the user name.
 func (u User) GetName() string {
 	return u.Name
+}
+
+func (u User) GetRole() string {
+	return u.Role
 }
